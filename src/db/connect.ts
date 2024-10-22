@@ -4,7 +4,7 @@ import path from "path";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-const mongoURI = `mongodb://127.0.0.1:27017/nexton`;
+const mongoURI = `mongodb://127.0.0.1:27017/proton`;
 
 export const connectDB = async (): Promise<void> => {
   try {

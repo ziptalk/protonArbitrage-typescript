@@ -4,15 +4,15 @@ import { priceModel } from "./model/price";
 export async function savePriceData(
   binanceBid: number,
   binanceAsk: number,
-  usdtToTon: number,
-  tonToUsdt: number,
+  usdtToNtrn: number,
+  ntrnToUsdt: number,
 ) {
   try {
     const price = new priceModel({
       binanceBid,
       binanceAsk,
-      usdtToTon,
-      tonToUsdt,
+      usdtToNtrn,
+      ntrnToUsdt,
     });
     await price.save();
     console.log("price data is saved...");
