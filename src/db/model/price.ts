@@ -10,7 +10,7 @@ interface IPrice extends Document {
 const priceSchema = new mongoose.Schema({
   binanceBid: { type: Number, required: true },
   binanceAsk: { type: Number, required: true },
-  usdtNtrn: { type: Number, required: true },
+  usdtToNtrn: { type: Number, required: true },
   ntrnToUsdt: { type: Number, required: true },
 });
 
