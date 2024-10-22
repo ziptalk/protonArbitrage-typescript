@@ -19,7 +19,7 @@ function handlePriceUpdate(
   usdtNtrnPrice: number,
   ntrnUsdtPrice: number,
 ) {
-  if (binanceBidPrice === -1 || binanceAskPrice === -1) {
+  if (binanceBidPrice === -1 || binanceAskPrice === -1 || !usdtNtrnPrice || !ntrnUsdtPrice) {
     return;
   }
   savePriceData(binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice);
