@@ -18,17 +18,11 @@ function handlePriceUpdate(
   binanceAskPrice: number,
   usdtNtrnPrice: number,
   ntrnUsdtPrice: number,
-  gapAverage: number,
-  gap: number
 ) {
   if (binanceBidPrice === -1 || binanceAskPrice === -1) {
     return;
   }
-  savePriceData(binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, gapAverage, gap);
-  // 조건 만족할 때만 DB 저장
-  if (ntrnUsdtPrice - binanceAskPrice > gapAverage) {
-    savePriceData(binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, gapAverage, gap);
-  }
+  savePriceData(binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice);
 }
 
 export async function init() {

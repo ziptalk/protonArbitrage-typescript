@@ -6,8 +6,6 @@ export async function savePriceData(
   binanceAsk: number,
   usdtToTon: number,
   tonToUsdt: number,
-  gapAverage: number,
-  gap: number
 ) {
   try {
     const price = new priceModel({
@@ -15,8 +13,6 @@ export async function savePriceData(
       binanceAsk,
       usdtToTon,
       tonToUsdt,
-      gapAverage,
-      gap,
     });
     await price.save();
     console.log("price data is saved...");
