@@ -1,4 +1,4 @@
-import { priceModel } from "./model/price";
+import { opportunityModel } from "./model/price";
 
 // 가격 데이터 저장 함수
 export async function savePriceData(
@@ -6,15 +6,21 @@ export async function savePriceData(
   binanceAsk: number,
   usdtToNtrn: number,
   ntrnToUsdt: number,
+  ntrnAmount: number,
+  isOpen?: boolean
 ) {
   try {
-    const price = new priceModel({
+    const timestamp = Date.now();
+    const opportunity = new opportunityModel({
       binanceBid,
       binanceAsk,
       usdtToNtrn,
       ntrnToUsdt,
+      ntrnAmount,
+      isOpen,
+      timestamp,
     });
-    await price.save();
+    await opportunity.save();
     console.log("price data is saved...");
   } catch (err) {
     console.error("Error saving price data", err);

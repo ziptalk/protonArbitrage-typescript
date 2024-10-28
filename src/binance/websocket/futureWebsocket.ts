@@ -1,45 +1,20 @@
 import WebSocket from "ws";
 import { Exchange } from "../../interface/exchange";
-import { getPrice } from "../../astroport/getPrice";
-import {init} from "../../index";
-
-// 새로운 타입 정의
-type priceManager = {
-  addPrice: (price: number) => void;
-  getPrices: () => number[];
-  average: () => number;
-};
-
-// Price를 관리하는 새로운 함수
-function createPriceManager(size: number): priceManager {
-  let prices: number[] = [];
-
-  return {
-    addPrice: (price: number) => {
-      prices.push(price);
-      if (prices.length > size) {
-        prices.shift(); // 가장 오래된 가격 제거
-      }
-    },
-    getPrices: () => [...prices], // 배열의 복사본 반환
-    average: () => prices.reduce((a, b) => a + b, 0) / prices.length, // 배열의 평균 반환
-  };
-}
+import AstroClient from "../../astroport/swap";
 
 export function getCurrentPriceDepthFutureBinanceWebsocket(
     _Name: Exchange,
-    _symbol: string,
-    _client: any,
+    _client: AstroClient,
+    ntrnAmount: number,
     callback: (
-        symbol: string,
         bidPrice: number,
         askPrice: number,
         usdtNtrnPrice: number,
         ntrnUsdtPrice: number,
-        gapAverage: number,
-        gap: number
+        ntrnAmount: number
     ) => void
 ) {
+  const _symbol = 'NTRN';
   const existingIndex = _Name.wss.findIndex((item) => Object.keys(item)[0] === "F" + _symbol);
   let ws: WebSocket | null;
   if (existingIndex === -1) {
@@ -60,24 +35,18 @@ export function getCurrentPriceDepthFutureBinanceWebsocket(
   let tempBidPrice = tempBidPriceObj["F" + _symbol + "B"];
   let tempAskPrice = tempAskPriceObj["F" + _symbol + "A"];
 
-  // price 관리자 생성: (astroport (USDT->NTRN) price - Binance bid price) 저장
-  const priceManager = createPriceManager(100);
-
   let ntrnUsdtPrice: number; // NTRN/USDT price when swap NTRN to USDT at astroport (NTRN->USDT)
   let usdtNtrnPrice: number; // NTRN/USDT price when swap USDT to NTRN at astroport (USDT->NTRN)
-  let calculatedPrice: number;
 
   function createFutureWebSocket(
       _Name: Exchange,
       _symbol: string,
       callback: (
-          symbol: string,
           bidPrice: number,
           askPrice: number,
           usdtNtrnPrice: number,
           ntrnUsdtPrice: number,
-          gapAverage: number,
-          gap: number
+          ntrnAmount: number
       ) => void
   ): WebSocket {
     const ws = new WebSocket(_Name.wssFutureUrl);
@@ -94,7 +63,7 @@ export function getCurrentPriceDepthFutureBinanceWebsocket(
       console.log(`${_Name.name} [${_symbol}]'s Future Websocket Connected at ${timestamp}`);
 
       setInterval(async () => {
-        [ntrnUsdtPrice, usdtNtrnPrice] = await getPrice(_client, 1000);
+        [ntrnUsdtPrice, usdtNtrnPrice] = await _client.getPrice(1000);
       }, 1000 * 1); // 1초마다 astroport 가격 업데이트
     };
 
@@ -105,21 +74,9 @@ export function getCurrentPriceDepthFutureBinanceWebsocket(
           console.log(tempAskPrice, tempBidPrice, ntrnUsdtPrice, usdtNtrnPrice, Date.now());
           if (response.b > 0) {
             tempBidPrice = parseFloat(response.b); // response.b: best bid price
-            calculatedPrice = usdtNtrnPrice - tempBidPrice; // astroport (USDT->NTRN) price - Binance bid price
-            priceManager.addPrice(calculatedPrice); // 새 데이터 추가
           }
           if (response.a > 0) {
             tempAskPrice = parseFloat(response.a); // response.a: best ask price
-            if (ntrnUsdtPrice - tempAskPrice > priceManager.average()) {
-              console.log(
-                  "*****기회 발견:",
-                  tempBidPrice,
-                  tempAskPrice,
-                  priceManager.average(),
-                  ntrnUsdtPrice - tempAskPrice,
-                  Date.now()
-              );
-            }
           }
 
           if (isNaN(tempBidPrice) && isNaN(tempAskPrice)) {
@@ -128,14 +85,13 @@ export function getCurrentPriceDepthFutureBinanceWebsocket(
 
           let bidPrice = tempBidPrice;
           let askPrice = tempAskPrice;
-          let gap = ntrnUsdtPrice - tempAskPrice;
 
-          callback(symbol, bidPrice, askPrice, usdtNtrnPrice, ntrnUsdtPrice, priceManager.average(), gap);
+          callback(bidPrice, askPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount);
         } else {
-          callback(symbol, -1, -1, -1, -1, -1, -1);
+          callback( -1, -1, -1, -1, -1);
         }
       } catch (error) {
-        callback("", -1, -1, -1, -1, -1, -1);
+        callback(-1, -1, -1, -1, -1);
       }
     };
 

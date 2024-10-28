@@ -1,108 +1,161 @@
-// import { mnemonicToWalletKey } from '@ton/crypto'
-// import TonWeb from 'tonweb'
-// import { DEX, pTON } from '@ston-fi/sdk'
-// import { TonClient, toNano } from '@ton/ton'
-// import {getAmounts, getTokenAddress, tokenDecimalsMap} from "./util";
-// import axios from "axios";
-//
-// export class StonfiConnector {
-//     private keyPair: any;
-//     private tonWeb: any;
-//     private client: any;
-//     private wallet: any;
-//     private tonClient: any;
-//     private dex: any;
-//     private authToken: any;
-//     private accountId: any;
-//
-//     constructor(authToken: string, accountId: string) {
-//         this.authToken = authToken
-//         this.accountId = accountId
-//     }
-//     async init(mnemonic: string, apiKey: string) {
-//         this.keyPair = await this.mnemonicToKeyPair(mnemonic)
-//         this.tonWeb = new TonWeb()
-//         this.client = new TonWeb.HttpProvider('https://toncenter.com/api/v2/jsonRPC', {apiKey})
-//         this.wallet = new this.tonWeb.wallet.all.v4R2(this.client, {publicKey: this.keyPair.publicKey})
-//         this.tonClient = new TonClient({
-//             endpoint: 'https://toncenter.com/api/v2/jsonRPC',
-//             apiKey,
-//         })
-//         this.dex = this.tonClient.open(new DEX.v1.Router())
-//     }
-//     async mnemonicToKeyPair(mnemonic: string) {
-//         const mnemonicArray = mnemonic.split(',').map(item => item.trim());
-//         return await mnemonicToWalletKey(mnemonicArray);
-//     }
-//     async fetchUSDTBalance() {
-//         const headers = {
-//             Authorization: `Bearer ${this.authToken}`
-//         }
-//         const response = await axios.get(`https://tonapi.io/v2/accounts/${this.accountId}/jettons/${getTokenAddress('USDT')}`, { headers })
-//         return response.data.balance / 10 ** 6
-//     }
-//     //amount : 넣을 수량
-//     //minAmount : 받을 수량(예측)
-//     async swapTonToUSDT(amount: number, minAmount: number) {
-//         const tokenAddress = getTokenAddress('USDT')
-//         const tonAmount = getAmounts('TON', amount)
-//         const usdtAmount = getAmounts('USDT', minAmount * 0.99)
-//         const txParams = await this.dex.getSwapTonToJettonTxParams({
-//             offerAmount: BigInt(tonAmount),
-//             askJettonAddress: tokenAddress,
-//             minAskAmount: BigInt(usdtAmount),
-//             proxyTon: new pTON.v1(),
-//             userWalletAddress: (await this.wallet.getAddress()).toString(),
-//         })
-//         try {
-//             const response = await this.wallet.methods
-//                 .transfer({
-//                     secretKey: this.keyPair.secretKey,
-//                     toAddress: txParams.to.toString(),
-//                     amount: new this.tonWeb.utils.BN(txParams.value.toString()),
-//                     seqno: (await this.wallet.methods.seqno().call()) ?? 0,
-//                     payload: TonWeb.boc.Cell.oneFromBoc(
-//                         TonWeb.utils.base64ToBytes(txParams.body?.toBoc().toString('base64')!)
-//                     ),
-//                     sendMode: 3,
-//                 })
-//                 .send()
-//             console.log(response)
-//             return response
-//         } catch (error) {
-//             console.log("error", error)
-//         }
-//     }
-//
-//     async swapUSDTToTon(amount: number, minAmount: number) {
-//         const tokenAddress = getTokenAddress('USDT')
-//         const usdtAmount = getAmounts('USDT', amount)
-//         const tonAmount = getAmounts('TON', minAmount * 0.99)
-//         const txParams = await this.dex.getSwapJettonToTonTxParams({
-//             userWalletAddress: (await this.wallet.getAddress()).toString(),
-//             offerAmount: BigInt(usdtAmount),
-//             minAskAmount: BigInt(tonAmount),
-//             proxyTon: new pTON.v1(),
-//             offerJettonAddress: tokenAddress,
-//         })
-//         try {
-//             const response = await this.wallet.methods
-//                 .transfer({
-//                     secretKey: this.keyPair.secretKey,
-//                     toAddress: txParams.to.toString(),
-//                     amount: new this.tonWeb.utils.BN(txParams.value.toString()),
-//                     seqno: (await this.wallet.methods.seqno().call()) ?? 0,
-//                     payload: TonWeb.boc.Cell.oneFromBoc(
-//                         TonWeb.utils.base64ToBytes(txParams.body?.toBoc().toString('base64')!)
-//                     ),
-//                     sendMode: 3,
-//                 })
-//                 .send()
-//             console.log(response)
-//             return response
-//         } catch (error) {
-//             console.log(error)
-//         }
-//     }
-// }
-//
+import {CosmWasmClient, SigningCosmWasmClient} from "@cosmjs/cosmwasm-stargate";
+import dotenv from "dotenv";
+import {DirectSecp256k1HdWallet} from "@cosmjs/proto-signing";
+import {Decimal} from "@cosmjs/math";
+import {GasPrice} from "@cosmjs/stargate";
+
+dotenv.config();
+
+class AstroClient {
+  private client: any;
+  private address: string
+  private readonly tokenAddressMap: Record<string, string>;
+  private readonly tokenDecimalsMap: Record<string, number>;
+
+  constructor(address : string) {
+    this.address = address
+    this.tokenAddressMap = {
+      NTRN: "untrn",
+      USDC: "ibc/B559A80D62249C8AA07A380E2A2BEA6E5CA9A6F079C912C3A9E9B494105E4F81",
+      axlUSDT: "ibc/57503D7852EF4E1899FE6D71C5E81D7C839F76580F86F21E39348FC2BC9D7CE2",
+    };
+    this.tokenDecimalsMap = {
+      NTRN: 6,
+      USDC: 6,
+      axlUSDT: 6,
+    };
+  }
+
+  async init(mnemonic: string, rpcUrl: string): Promise<void> {
+
+    const botWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+      prefix: "neutron",
+    });
+    const amountGas: Decimal = Decimal.fromUserInput((0.15).toString(), 6)
+    const gasPrice: GasPrice = <GasPrice>{amount: amountGas, denom: 'untrn'};
+    this.client = await SigningCosmWasmClient.connectWithSigner(
+        rpcUrl,
+        botWallet,
+        {gasPrice}
+    )
+  }
+
+  private getTokenAddress(tokenName: string): string {
+    const address = this.tokenAddressMap[tokenName];
+    if (!address) throw new Error(`Token address not found for token name: ${tokenName}`);
+    return address;
+  }
+
+  private getAmounts(tokenName: string, amount: number, reverse = false): string {
+    const decimals = this.tokenDecimalsMap[tokenName];
+    if (decimals === undefined) throw new Error(`Token decimals not found for token name: ${tokenName}`);
+    if(reverse) return (amount / 10 ** decimals).toString();
+    else return (amount * 10 ** decimals).toFixed();
+  }
+
+  async getPrice(amount: number): Promise<[number, number]> {
+    const contractAddr = process.env.USDC_NTRN_CONTRACT as string;
+    const offerAsset = 'NTRN';
+
+    try {
+      const simulationMsg = {
+        simulation: {
+          offer_asset: {
+            info: { native_token: { denom: this.getTokenAddress(offerAsset) } },
+            amount: this.getAmounts(offerAsset, amount),
+          },
+        },
+      };
+      const reverseSimulationMsg = {
+        reverse_simulation: {
+          ask_asset: {
+            info: { native_token: { denom: this.getTokenAddress(offerAsset) } },
+            amount: this.getAmounts(offerAsset, amount),
+          },
+        },
+      };
+
+      const [response1, response2] = await Promise.all([
+        (this.client as CosmWasmClient).queryContractSmart(contractAddr, simulationMsg),
+        (this.client as CosmWasmClient).queryContractSmart(contractAddr, reverseSimulationMsg),
+      ]);
+      const price1 = Number(response1.return_amount) / (10 ** this.tokenDecimalsMap[offerAsset] * amount);
+      const price2 = Number(response2.offer_amount) / (10 ** this.tokenDecimalsMap[offerAsset] * amount);
+
+      return [Number(price1.toFixed(4)), Number(price2.toFixed(4))];
+    } catch (error) {
+      console.error('Error fetching prices:', error);
+      return [-1, -1];
+    }
+  }
+
+  async swapNtrnToUsdc(offerAmount: number): Promise<string> {
+    const offerToken = 'NTRN';
+    const contractAddress = process.env.USDC_NTRN_CONTRACT as string;
+    const address = process.env.ACCOUNT_ADDRESS as string;
+    try {
+      const msg = {
+        swap: {
+          offer_asset: {
+            info: { native_token: { denom: this.getTokenAddress(offerToken) } },
+            amount: this.getAmounts(offerToken, offerAmount),
+          },
+        },
+      };
+      const funds = [{ amount: this.getAmounts(offerToken, offerAmount), denom: this.getTokenAddress(offerToken) }];
+
+      const result = await (this.client as SigningCosmWasmClient).execute(
+          address,
+          contractAddress,
+          msg,
+          'auto',
+          "",
+          funds
+      );
+      console.log(result)
+      return result.transactionHash
+    } catch (err) {
+      console.error("Swap execution failed:", err);
+      return "" ;
+    }
+  }
+
+  async swapUsdcToNtrn(askAmount: number): Promise<string> {
+    const askToken = 'USDC';
+    const contractAddress = process.env.USDC_NTRN_CONTRACT as string;
+    const address = process.env.ACCOUNT_ADDRESS as string;
+    try {
+      const msg = {
+        swap: {
+          offer_asset: {
+            info: { native_token: { denom: this.getTokenAddress(askToken) } },
+            amount: this.getAmounts(askToken, askAmount),
+          },
+        },
+      };
+      const funds = [{ amount: this.getAmounts(askToken, askAmount), denom: this.getTokenAddress(askToken) }];
+
+      const result = await (this.client as SigningCosmWasmClient).execute(
+          address,
+          contractAddress,
+          msg,
+          'auto',
+          "",
+          funds
+      );
+      console.log(result)
+      return result.transactionHash
+    } catch (err) {
+      console.error("Swap execution failed:", err);
+      return ''
+    }
+  }
+
+  async fetchBalance(): Promise<number> {
+    const tokenDenom = this.getTokenAddress('USDC');
+    const balance = await this.client.getBalance(this.address, tokenDenom);
+    return Number(this.getAmounts('USDC', Number(balance.amount), true));
+  }
+}
+
+export default AstroClient;
