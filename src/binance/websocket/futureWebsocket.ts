@@ -71,7 +71,6 @@ export function getCurrentPriceDepthFutureBinanceWebsocket(
       const response = JSON.parse(event.data.toString());
       try {
         if (response.s == _symbol + _Name.futureSuffix) {
-          console.log(tempAskPrice, tempBidPrice, ntrnUsdtPrice, usdtNtrnPrice, Date.now());
           if (response.b > 0) {
             tempBidPrice = parseFloat(response.b); // response.b: best bid price
           }

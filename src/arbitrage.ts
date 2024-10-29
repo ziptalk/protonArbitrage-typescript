@@ -23,4 +23,3 @@ export async function swap(binanceClient: USDMClient, astroClient: AstroClient, 
     }
     else console.log("error")
 }
-

@@ -21,7 +21,6 @@ export async function savePriceData(
       timestamp,
     });
     await opportunity.save();
-    console.log("price data is saved...");
   } catch (err) {
     console.error("Error saving price data", err);
   }
