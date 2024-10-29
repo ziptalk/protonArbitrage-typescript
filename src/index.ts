@@ -22,8 +22,10 @@ async function main() {
     const timestamp = Date.now();
 
     // 유효성 검증
-    if ([binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice].includes(-1) ||
-        [usdtNtrnPrice, ntrnUsdtPrice].some(Number.isNaN)) {
+    if (
+        [binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice].includes(-1) ||
+        [binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice].some(value => value === undefined || Number.isNaN(value))
+    ) {
       return;
     }
 
