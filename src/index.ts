@@ -34,7 +34,7 @@ async function main() {
       return;
     }
     // 첫 번째 거래 조건: TON을 USDT로 스왑
-    if (ntrnUsdtPrice - binanceAskPrice > 0.0005 && usdcAmount === 0) {
+    if (ntrnUsdtPrice - binanceAskPrice > 0.003 && usdcAmount === 0) {
       console.log("Open",binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount, timestamp);
       isTrading = true;
       await swap(binanceClient, astroClient, ntrnAmount, true);
@@ -52,7 +52,7 @@ async function main() {
       isTrading = false;
     }
     // 두 번째 거래 조건: USDT를 TON으로 스왑
-    else if (usdtNtrnPrice - binanceBidPrice < 0.0001 && usdcAmount > 0) {
+    else if (usdtNtrnPrice - binanceBidPrice < -0.002 && usdcAmount > 0) {
       console.log("Close",binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount, timestamp);
       isTrading = true;
       await swap(binanceClient, astroClient, ntrnAmount, false, usdcAmount);
