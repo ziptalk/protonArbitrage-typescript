@@ -31,7 +31,7 @@ class AstroClient {
     const botWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
       prefix: "neutron",
     });
-    const amountGas: Decimal = Decimal.fromUserInput((0.15).toString(), 6)
+    const amountGas: Decimal = Decimal.fromUserInput((0.01).toString(), 6)
     const gasPrice: GasPrice = <GasPrice>{amount: amountGas, denom: 'untrn'};
     this.client = await SigningCosmWasmClient.connectWithSigner(
         rpcUrl,
