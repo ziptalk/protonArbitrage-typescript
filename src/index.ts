@@ -3,13 +3,13 @@ import {init, swap} from "./arbitrage";
 import {savePriceData} from "./db/store";
 import {BINANCE} from "./interface/exchange";
 import {getCurrentPriceDepthFutureBinanceWebsocket} from "./binance/websocket/futureWebsocket";
-import AstroClient from "./astroport/swap";
+import AstroClient from "./astroport/astroClient";
 
 let usdcAmount: number = 0;
 let isTrading = false;
 
 async function main() {
-  const { binanceClient, astroClient } = await init();
+  const { binanceClient, astroClient , openGap, closeGap} = await init();
 
   await connectDB(); // MongoDB 연결
   const handlePriceUpdate = async (
@@ -34,7 +34,7 @@ async function main() {
       return;
     }
     // 첫 번째 거래 조건: TON을 USDT로 스왑
-    if (ntrnUsdtPrice - binanceAskPrice > 0.0002 && usdcAmount === 0) {
+    if (ntrnUsdtPrice - binanceAskPrice > openGap && usdcAmount === 0) {
       console.log("Open",binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount, timestamp);
       isTrading = true;
       await swap(binanceClient, astroClient, ntrnAmount, true);
@@ -52,7 +52,7 @@ async function main() {
       isTrading = false;
     }
     // 두 번째 거래 조건: USDT를 TON으로 스왑
-    else if (usdtNtrnPrice - binanceBidPrice < -0.001 && usdcAmount > 0) {
+    else if (usdtNtrnPrice - binanceBidPrice < closeGap && usdcAmount > 0) {
       console.log("Close",binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount, timestamp);
       isTrading = true;
       await swap(binanceClient, astroClient, ntrnAmount, false, usdcAmount);

@@ -1,6 +1,6 @@
 import {USDMClient} from "binance";
 import {placeOrder} from "./binance/rest/placeOrder";
-import AstroClient from "./astroport/swap";
+import AstroClient from "./astroport/astroClient";
 import dotenv from "dotenv";
 dotenv.config()
 export async function init() {
@@ -11,8 +11,9 @@ export async function init() {
     const astroClient = new AstroClient(process.env.ACCOUNT_ADDRESS as string)
     await astroClient.init(process.env.MNEMONIC as string, process.env.RPC_URL as string)
     console.log("init")
-
-    return { binanceClient, astroClient }
+    const openGap = process.env.OPEN_GAP as string
+    const closeGap = process.env.CLOSE_GAP as string
+    return { binanceClient, astroClient, openGap, closeGap }
 }
 export async function swap(binanceClient: USDMClient, astroClient: AstroClient, ntrnAmount: number, isOpen: boolean, usdtAmount? : number) {
     if(isOpen){
