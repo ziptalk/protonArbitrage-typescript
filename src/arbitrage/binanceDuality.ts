@@ -27,6 +27,8 @@ export async function runBinanceDualityArbitrage(quantity: number) {
 
     console.log('Connected to Duality, Binance');
 
+    console.log('Starting arbitrage monitoring...');
+
     const tokens: Token[] = [
       TOKENS_MAP.get(TokenSymbol.TIA)!,
       TOKENS_MAP.get(TokenSymbol.NTRN)!,
@@ -34,12 +36,26 @@ export async function runBinanceDualityArbitrage(quantity: number) {
     ];
 
     for (const token of tokens) {
+      console.log(`\nChecking ${token.symbol} arbitrage opportunity...`);
       // Get order books from both exchanges
       const dualityOrderBook = await apiClient.getOrderBook(token.symbol);
       const binanceOrderBook = await getOrderBook(binanceClient, token.symbol);
 
+      if (!binanceOrderBook || !dualityOrderBook.asks.length || !binanceOrderBook.bids.length) {
+        console.log(`Skipping ${token.symbol}: Insufficient orderbook data`);
+        continue;
+      }
+
+      const binanceBidPrice = Number(binanceOrderBook.bids[0][0]);
+      const binanceAskPrice = Number(binanceOrderBook.asks[0][0]);
+      const dualityAskPrice = dualityOrderBook.asks[0].price;
+      const dualityBidPrice = dualityOrderBook.bids[0].price;
+
+      console.log(
+        `Binance Bid Price: ${binanceBidPrice}, Binance Ask Price: ${binanceAskPrice}, Duality Ask Price: ${dualityAskPrice}, Duality Bid Price: ${dualityBidPrice}`)
       // Compare prices and execute arbitrage if profitable
-      if (Number(binanceOrderBook?.bids[0][0]) > dualityOrderBook.asks[0].price) {
+      if (binanceBidPrice > dualityAskPrice) {
+        console.log(`Found arbitrage opportunity for ${token.symbol}!`);
         // Buy on Duality, Sell on Binance
         const dualityBuyResult = await dualityClient.placeLimitOrder(
           account.address,
@@ -52,7 +68,7 @@ export async function runBinanceDualityArbitrage(quantity: number) {
 
         const binanceSellResult = await placeOrder(binanceClient, token.symbol, quantity, 'SELL');
         console.log('Binance Sell Result:', binanceSellResult);
-      } else if (Number(binanceOrderBook?.asks[0][0]) < dualityOrderBook.bids[0].price) {
+      } else if (binanceAskPrice < dualityBidPrice) {
         // Buy on Binance, Sell on Duality
         const binanceBuyResult = await placeOrder(binanceClient, token.symbol, quantity, 'BUY');
         console.log('Binance Buy Result:', binanceBuyResult);
@@ -65,6 +81,8 @@ export async function runBinanceDualityArbitrage(quantity: number) {
           dualityOrderBook.bids[0].price.toString(),
         );
         console.log('Duality Sell Result:', dualitySellResult);
+      } else {
+        console.log(`No arbitrage opportunity found for ${token.symbol}`);
       }
     }
   } catch (error) {
@@ -75,3 +93,4 @@ export async function runBinanceDualityArbitrage(quantity: number) {
     }
   }
 }
+runBinanceDualityArbitrage(1)

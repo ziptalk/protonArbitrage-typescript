@@ -1,4 +1,5 @@
-import { USDMClient } from 'binance';
+import {USDMClient} from 'binance';
+
 export async function placeOrder(
   client: USDMClient,
   symbol: string,
@@ -22,11 +23,9 @@ export async function placeOrder(
 
 export async function getOrderBook(client: USDMClient, symbol: string) {
   try {
-    const orderbook = await client.getOrderBook({
+    return await client.getOrderBook({
       symbol: symbol + 'USDT',
     });
-    console.log('Orderbook:', orderbook);
-    return orderbook;
   } catch (error) {
     console.error('Error fetching orderbook:', error);
   }

@@ -17,6 +17,7 @@ import {
   QueryParamsResponse,
 } from '@neutron-org/neutronjs/neutron/dex/query';
 import { TokenPair, TOKENS_MAP, TokenSymbol } from '../../util/token';
+import {TradePairID} from "@neutron-org/neutronjs/neutron/dex/trade_pair_id";
 
 export function calculateNTRNAmount(amount: string): number {
   return Number(amount) / 10 ** 6;
@@ -54,7 +55,7 @@ export class DualityApi {
 
   // Query limit order tranche user
   async getLimitOrderTrancheUser(
-    request: QueryGetLimitOrderTrancheUserRequest,
+      request: QueryGetLimitOrderTrancheUserRequest,
   ): Promise<QueryGetLimitOrderTrancheUserResponse> {
     const { address, trancheKey, calcWithdrawableShares } = request;
     const params = new URLSearchParams();
@@ -63,8 +64,8 @@ export class DualityApi {
     }
 
     const response = await this.axiosInstance.get(
-      `/limit_order_tranche_user/${address}/${trancheKey}`,
-      { params },
+        `/limit_order_tranche_user/${address}/${trancheKey}`,
+        { params },
     );
     return response.data;
   }
@@ -82,19 +83,19 @@ export class DualityApi {
 
   // Query limit order tranche
   async getLimitOrderTranche(
-    request: QueryGetLimitOrderTrancheRequest,
+      request: QueryGetLimitOrderTrancheRequest,
   ): Promise<QueryGetLimitOrderTrancheResponse> {
     const { pairId, tickIndex, tokenIn, trancheKey } = request;
     const response = await this.axiosInstance.get(
-      `/limit_order_tranche/${pairId}/${tokenIn}/${tickIndex}/${trancheKey}`,
+        `/limit_order_tranche/${pairId}/${tokenIn}/${tickIndex}/${trancheKey}`,
     );
     return response.data;
   }
 
   // Query all limit order tranches by address
   async getLimitOrderTranchesByAddress(
-    address: string,
-    pagination?: PageRequestParams,
+      address: string,
+      pagination?: PageRequestParams,
   ): Promise<{
     limitOrderTranches: LimitOrderTranche[];
     pagination: PageResponse;
@@ -107,9 +108,9 @@ export class DualityApi {
 
   // Get all limit order tranches
   async getAllLimitOrderTranches(
-    pairId: string,
-    tokenIn: string,
-    pagination?: PageRequestParams,
+      pairId: string,
+      tokenIn: string,
+      pagination?: PageRequestParams,
   ): Promise<{
     limitOrderTranches: LimitOrderTranche[];
     pagination: PageResponse;
@@ -123,9 +124,9 @@ export class DualityApi {
 
   // Get tick liquidity
   async getTickLiquidity(
-    pairId: string,
-    tokenIn: string,
-    pagination?: PageRequestParams,
+      pairId: string,
+      tokenIn: string,
+      pagination?: PageRequestParams,
   ): Promise<{
     tickLiquidities: TickLiquidity[];
     pagination: PageResponse;
@@ -138,20 +139,20 @@ export class DualityApi {
 
   // Get pool reserves
   async getPoolReserves(
-    pairId: string,
-    tokenIn: string,
-    tickIndex: number,
-    fee: number,
+      pairId: string,
+      tokenIn: string,
+      tickIndex: number,
+      fee: number,
   ): Promise<PoolReserves | null> {
     try {
       const response = await this.axiosInstance.get(
-        `/neutron/dex/pool_reserves/${pairId}/${tokenIn}`,
-        {
-          params: {
-            tick_index: tickIndex,
-            fee,
+          `/neutron/dex/pool_reserves/${pairId}/${tokenIn}`,
+          {
+            params: {
+              tick_index: tickIndex,
+              fee,
+            },
           },
-        },
       );
       return response.data;
     } catch (error) {
@@ -162,9 +163,9 @@ export class DualityApi {
 
   // Get all pool reserves
   async getAllPoolReserves(
-    pairId: string,
-    tokenIn: string,
-    pagination?: PageRequestParams,
+      pairId: string,
+      tokenIn: string,
+      pagination?: PageRequestParams,
   ): Promise<{
     poolReserves: PoolReserves[];
     pagination: PageResponse;
@@ -177,13 +178,13 @@ export class DualityApi {
 
   // Get inactive limit order tranche
   async getInactiveLimitOrderTranche(
-    pairId: string,
-    tokenIn: string,
-    tickIndex: number,
-    trancheKey: string,
+      pairId: string,
+      tokenIn: string,
+      tickIndex: number,
+      trancheKey: string,
   ): Promise<LimitOrderTranche> {
     const response = await this.axiosInstance.get(
-      `/filled_limit_order_tranche/${pairId}/${tokenIn}/${tickIndex}/${trancheKey}`,
+        `/filled_limit_order_tranche/${pairId}/${tokenIn}/${tickIndex}/${trancheKey}`,
     );
     return response.data;
   }
@@ -260,23 +261,22 @@ export class DualityApi {
         allOrders = [...allOrders, ...result.limit_order_tranche_user];
         nextKey = result.pagination.next_key ? result.pagination.next_key.toString() : null;
       } while (nextKey);
-      console.log(allOrders.length);
-      const filteredResults = allOrders.filter((order) => {
-        const pair = order.trade_pair_id;
+      const filteredResults = allOrders.filter((order: LimitOrderTrancheUser) => {
+        const pair: TradePairID | undefined = order.trade_pair_id;
 
         const activeShares =
-          BigInt(order.shares_owned) -
-          BigInt(order.shares_withdrawn) -
-          BigInt(order.shares_cancelled);
+            BigInt(order.shares_owned) -
+            BigInt(order.shares_withdrawn) -
+            BigInt(order.shares_cancelled);
         if (activeShares <= BigInt(0)) {
           return false;
         }
 
         return (
-          (pair?.maker_denom === TOKENS_MAP.get(token)?.denom &&
-            pair?.taker_denom === TOKENS_MAP.get(TokenSymbol.USDC)?.denom) ||
-          (pair?.maker_denom === TOKENS_MAP.get(TokenSymbol.USDC)?.denom &&
-            pair?.taker_denom === TOKENS_MAP.get(token)?.denom)
+            (pair?.maker_denom === TOKENS_MAP.get(token)?.denom &&
+                pair?.taker_denom === TOKENS_MAP.get(TokenSymbol.USDC)?.denom) ||
+            (pair?.maker_denom === TOKENS_MAP.get(TokenSymbol.USDC)?.denom &&
+                pair?.taker_denom === TOKENS_MAP.get(token)?.denom)
         );
       });
 
@@ -285,9 +285,9 @@ export class DualityApi {
       filteredResults.forEach((order) => {
         const price = calculateTickPrice(Number(order.tick_index_taker_to_maker));
         const formattedPrice = Number(
-          order.trade_pair_id?.maker_denom === TOKENS_MAP.get(TokenSymbol.USDC)?.denom
-            ? (1 / price).toFixed(6)
-            : price.toFixed(6),
+            order.trade_pair_id?.maker_denom === TOKENS_MAP.get(TokenSymbol.USDC)?.denom
+                ? (1 / price).toFixed(6)
+                : price.toFixed(6),
         );
 
         if (!priceMap.has(formattedPrice)) {
@@ -295,9 +295,9 @@ export class DualityApi {
         }
         const entry = priceMap.get(formattedPrice)!;
         const activeShares =
-          BigInt(order.shares_owned) -
-          BigInt(order.shares_withdrawn) -
-          BigInt(order.shares_cancelled);
+            BigInt(order.shares_owned) -
+            BigInt(order.shares_withdrawn) -
+            BigInt(order.shares_cancelled);
         entry.quantity += calculateNTRNAmount(activeShares.toString());
         entry.orders.push(order);
       });
