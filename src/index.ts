@@ -1,97 +1,43 @@
-import {connectDB} from "./db/connect";
-import {init, swap} from "./arbitrage";
-import {savePriceData} from "./db/store";
-import {BINANCE} from "./interface/exchange";
-import {getCurrentPriceDepthFutureBinanceWebsocket} from "./binance/websocket/futureWebsocket";
-import AstroClient from "./astroport/astroClient";
+import dotenv from 'dotenv';
+import { runBinanceDualityArbitrage } from './arbitrage/binanceDuality';
+import { runAstroportDualityArbitrage } from './arbitrage/astroportDuality';
 
-let usdcAmount: number = 0;
-let isTrading = false;
+dotenv.config();
 
-async function main() {
-  const { binanceClient, astroClient , openGap, closeGap} = await init();
+const ARBITRAGE_INTERVAL = 10000; // 10 seconds
 
-  await connectDB(); // MongoDB 연결
-  const handlePriceUpdate = async (
-      binanceBidPrice: number,
-      binanceAskPrice: number,
-      usdtNtrnPrice: number,
-      ntrnUsdtPrice: number,
-      ntrnAmount: number,
+async function startArbitrage() {
+  console.log('Starting arbitrage strategies...');
+
+  // Function to run a strategy with error handling
+  const runStrategy = async (
+    name: string,
+    strategy: (quantity: number) => Promise<void>,
+    quantity: number
   ) => {
-    const timestamp = Date.now();
-
-    // 유효성 검증
-    if (
-        [binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice].includes(-1) ||
-        [binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice].some(value => value === undefined || Number.isNaN(value))
-    ) {
-      return;
-    }
-
-    // 거래 중이면 다른 거래 대기
-    if (isTrading) {
-      return;
-    }
-    // 첫 번째 거래 조건: TON을 USDT로 스왑
-    if (ntrnUsdtPrice - binanceAskPrice > openGap && usdcAmount === 0) {
-      console.log("Open",binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount, timestamp);
-      isTrading = true;
-      await swap(binanceClient, astroClient, ntrnAmount, true);
-      await savePriceData(
-          binanceBidPrice,
-          binanceAskPrice,
-          usdtNtrnPrice,
-          ntrnUsdtPrice,
-          ntrnAmount,
-          true,
-      )
-      // 잔액이 업데이트될 때까지 대기
-      usdcAmount = await waitForBalanceUpdate(astroClient);
-      console.log("USDC balance updated: " + usdcAmount);
-      isTrading = false;
-    }
-    // 두 번째 거래 조건: USDT를 TON으로 스왑
-    else if (usdtNtrnPrice - binanceBidPrice < closeGap && usdcAmount > 0) {
-      console.log("Close",binanceBidPrice, binanceAskPrice, usdtNtrnPrice, ntrnUsdtPrice, ntrnAmount, timestamp);
-      isTrading = true;
-      await swap(binanceClient, astroClient, ntrnAmount, false, usdcAmount);
-      await savePriceData(
-          binanceBidPrice,
-          binanceAskPrice,
-          usdtNtrnPrice,
-          ntrnUsdtPrice,
-          ntrnAmount,
-          false,
-      )
-      usdcAmount = 0;
-      isTrading = false;
-    }
-    else {
-      // 평소 데이터 저장
-      await savePriceData(
-          binanceBidPrice,
-          binanceAskPrice,
-          usdtNtrnPrice,
-          ntrnUsdtPrice,
-          ntrnAmount,
-      );
+    try {
+      await strategy(quantity);
+    } catch (error) {
+      console.error(`Error in ${name} strategy:`, error instanceof Error ? error.message : error);
     }
   };
 
-  getCurrentPriceDepthFutureBinanceWebsocket(BINANCE, astroClient, 100, handlePriceUpdate);
+  // Run both strategies in intervals
+  setInterval(async () => {
+    console.log('\n--- Starting new arbitrage cycle ---');
+    
+    // Run both strategies concurrently
+    await Promise.all([
+      runStrategy('Binance-Duality', runBinanceDualityArbitrage, 1),
+      runStrategy('Astroport-Duality', runAstroportDualityArbitrage, 1)
+    ]);
+    
+    console.log('--- Completed arbitrage cycle ---\n');
+  }, ARBITRAGE_INTERVAL);
 }
 
-main().then(console.error)
-
-async function waitForBalanceUpdate(astroClient: AstroClient, checkInterval: number = 3000): Promise<number> {
-  return new Promise<number>((resolve) => {  // Specify the Promise resolves with a number
-    const intervalId = setInterval(async () => {
-      const usdcAmount = await astroClient.fetchBalance();
-      if (usdcAmount > 0) {
-        clearInterval(intervalId);
-        resolve(usdcAmount);  // Resolve with the updated balance
-      }
-    }, checkInterval);
-  });
-}
+// Start the arbitrage process
+startArbitrage().catch((error) => {
+  console.error('Fatal error in arbitrage process:', error);
+  process.exit(1);
+});

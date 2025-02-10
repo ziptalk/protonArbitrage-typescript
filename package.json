@@ -1,11 +1,15 @@
 {
   "name": "protonArbitrage",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Arbitrage trading bot for Binance, Astroport, and Duality",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "tsc && node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "lint": "eslint . --ext .ts",
+    "test": "jest",
+    "format": "prettier --write \"src/**/*.ts\""
   },
   "author": "",
   "license": "ISC",
@@ -14,8 +18,10 @@
     "@cosmjs/math": "^0.32.4",
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
+    "@neutron-org/neutronjs": "^4.2.0",
     "@types/ws": "^8.5.12",
     "axios": "^1.7.7",
+    "bignumber.js": "^9.1.2",
     "binance": "^2.13.5",
     "dotenv": "^16.4.5",
     "mongoose": "^8.7.3",
@@ -23,6 +29,7 @@
   },
   "devDependencies": {
     "@types/mongoose": "^5.11.97",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.6.3"
   }
 }
