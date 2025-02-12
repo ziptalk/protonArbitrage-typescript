@@ -126,7 +126,7 @@ export class DualityClient {
     side: 'BUY' | 'SELL',
     amountIn: string,
     limitPrice: string | number,
-    orderType: OrderType = OrderType.GOOD_TIL_CANCELLED,
+    orderType: OrderType = OrderType.IMMEDIATE_OR_CANCEL,
     maxRetries: number = 3,
     priceAdjustmentFactor: number = 1.01,
   ) {
