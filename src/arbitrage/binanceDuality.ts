@@ -1,53 +1,20 @@
-import { DualityClient } from '../exchange/duality/dualityClient';
-import {USDMClient} from "binance";
-import {getOrderBook, placeOrder} from '../exchange/binance/rest/restClient';
+import {getOrderBook, placeOrder} from '../exchange/binance/rest/binanceClient';
 import {getTokenBySymbol, TokenSymbol} from '../util/token';
-
-import dotenv from 'dotenv';
-dotenv.config();
+import {init} from "./init";
 
 export async function runBinanceDualityArbitrage(quantity: number) {
   try {
-    const dualityClient = await DualityClient.getInstance(
-      process.env.RPC_URL as string,
-      process.env.MNEMONIC as string,
-      {
-        gasPrice: '0.025untrn',
-      }
-    );
-
-    const binanceClient = new USDMClient({
-      api_key: process.env.BINANCE_API_KEY as string,
-      api_secret: process.env.BINANCE_API_SECRET as string,
-    });
-
-    console.log('Connected to Duality, Binance');
-    console.log('Starting arbitrage monitoring...');
+    const { binanceClient, dualityClient } = await init();
 
     const tokenIn = getTokenBySymbol(TokenSymbol.NTRN);
-    const tokenOut = getTokenBySymbol(TokenSymbol.USDC);
 
     console.log(`\nChecking ${TokenSymbol.NTRN} arbitrage opportunity...`);
-    const dualityOrderBook = await dualityClient.getOrderBook(tokenIn, tokenOut);
-    console.log('Duality Orderbook:', dualityOrderBook);
+    const [dualityAskPrice, dualityBidPrice] = await dualityClient.getOrderBook(tokenIn);
 
     const binanceOrderBook = await getOrderBook(binanceClient, tokenIn.symbol);
 
-    if (!binanceOrderBook || !dualityOrderBook) {
-      console.error('Failed to fetch order books');
-      return;
-    }
-
-    if (binanceOrderBook.bids.length === 0 || binanceOrderBook.asks.length === 0 || 
-        dualityOrderBook.bids.length === 0 || dualityOrderBook.asks.length === 0) {
-      console.error('Order books are empty');
-      return;
-    }
-
     const binanceBidPrice = Number(binanceOrderBook.bids[0][0]);
     const binanceAskPrice = Number(binanceOrderBook.asks[0][0]);
-    const dualityAskPrice = dualityOrderBook.asks[0].price;
-    const dualityBidPrice = dualityOrderBook.bids[0].price;
 
     console.log(
       `Binance Bid Price: ${binanceBidPrice}, Binance Ask Price: ${binanceAskPrice}, Duality Ask Price: ${dualityAskPrice}, Duality Bid Price: ${dualityBidPrice}`)
@@ -60,7 +27,7 @@ export async function runBinanceDualityArbitrage(quantity: number) {
         tokenIn,
         'BUY',
         quantity.toString(),
-        dualityOrderBook.asks[0].price.toString(),
+        dualityAskPrice.toString(),
       );
       console.log('Duality Buy Result:', dualityBuyResult);
 
@@ -77,7 +44,7 @@ export async function runBinanceDualityArbitrage(quantity: number) {
         tokenIn,
         'SELL',
         quantity.toString(),
-        dualityOrderBook.bids[0].price.toString(),
+        dualityBidPrice.toString(),
       );
       console.log('Duality Sell Result:', dualitySellResult);
     } else {
