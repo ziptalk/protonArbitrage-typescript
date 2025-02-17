@@ -3,25 +3,20 @@ import dotenv from 'dotenv';
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { Decimal } from '@cosmjs/math';
 import { GasPrice, SearchTxQuery } from '@cosmjs/stargate';
-import { Token, TokenPair, TokenSymbol, TOKEN_PAIRS_MAP, TOKENS_MAP } from '../../util/token';
-import { getTokenPairContract } from '../../util/token';
+import { TokenSymbol, getTokenBySymbol, getPairByTokens } from '../../util/token';
 
 dotenv.config();
 
 class AstroClient {
   private client: any;
   private readonly address: string;
-  private tokens: ReadonlyMap<TokenSymbol, Token>;
-  private tokenPairs: ReadonlyMap<string, TokenPair>;
 
   constructor(address: string) {
     this.address = address;
-    this.tokens = TOKENS_MAP;
-    this.tokenPairs = TOKEN_PAIRS_MAP;
   }
 
   getToken(symbol: TokenSymbol): Token | undefined {
-    const token = this.tokens.get(symbol);
+    const token = getTokenBySymbol(symbol);
     if (!token) {
       console.warn(`토큰을 찾을 수 없습니다: ${symbol}`);
     }
@@ -62,7 +57,8 @@ class AstroClient {
     askAsset: TokenSymbol,
     amount: number,
   ): Promise<[number, number]> {
-    const contractAddress = getTokenPairContract(offerAsset, askAsset);
+    const pair = getPairByTokens(offerAsset, askAsset);
+    const contractAddress = pair.contractAddress;
     console.log(contractAddress);
     if (!contractAddress)
       throw new Error(`토큰 컨트랙트를 찾을 수 없습니다: ${offerAsset} ${askAsset}`);
@@ -107,7 +103,8 @@ class AstroClient {
     askAsset: TokenSymbol,
     amount: number,
   ): Promise<string> {
-    const contractAddress = getTokenPairContract(offerToken, askAsset);
+    const pair = getPairByTokens(offerToken, askAsset);
+    const contractAddress = pair.contractAddress;
     if (!contractAddress)
       throw new Error(`토큰 컨트랙트를 찾을 수 없습니다: ${offerToken} ${askAsset}`);
     const address = this.address;

@@ -1,61 +1,98 @@
-import { MsgPlaceLimitOrder } from '@neutron-org/neutronjs/neutron/dex/tx';
+import {LimitOrderType, MsgPlaceLimitOrder} from '@neutron-org/neutronjs/neutron/dex/tx';
 import {
   createProtobufRpcClient,
-  GasPrice,
-  QueryClient,
+  GasPrice, ProtobufRpcClient, QueryClient,
   SigningStargateClient,
 } from '@cosmjs/stargate';
 import { GeneratedType, OfflineSigner, Registry } from '@cosmjs/proto-signing';
 import { Msg, MsgClientImpl } from '@neutron-org/neutronjs/neutron/dex/tx.rpc.msg';
 import { Tendermint34Client } from '@cosmjs/tendermint-rpc';
 import BigNumber from 'bignumber.js';
-import { TOKENS_MAP, TokenSymbol } from '../../util/token';
-
-const calculateDecimal = (input: string | number, decimals: number): string => {
-  const limitSellPrice = new BigNumber(input);
-  const scaleFactor = new BigNumber(10).pow(decimals);
-  return limitSellPrice.times(scaleFactor).toFixed(0);
-};
+import {
+  TokenSymbol,
+  getTokenBySymbol,
+  TokenMetadata,
+  calculateTokenAmount,
+  calculateDecimal,
+  calculateTickPrice
+} from '../../util/token';
+import {createRpcQueryExtension} from "@neutron-org/neutronjs/neutron/dex/query.rpc.Query";
+import { 
+  QueryParamsRequest, 
+  QueryParamsResponse, 
+  QueryGetLimitOrderTrancheUserRequest, 
+  QueryGetLimitOrderTrancheUserResponse, 
+  QueryAllLimitOrderTrancheUserRequest, 
+  QueryAllLimitOrderTrancheUserResponse, 
+  QueryAllLimitOrderTrancheUserByAddressRequest, 
+  QueryAllLimitOrderTrancheUserByAddressResponse, 
+  QueryGetLimitOrderTrancheRequest, 
+  QueryGetLimitOrderTrancheResponse, 
+  QueryAllLimitOrderTrancheRequest, 
+  QueryAllLimitOrderTrancheResponse, 
+  QueryAllUserDepositsRequest, 
+  QueryAllUserDepositsResponse, 
+  QueryAllTickLiquidityRequest, 
+  QueryAllTickLiquidityResponse, 
+  QueryGetInactiveLimitOrderTrancheRequest, 
+  QueryGetInactiveLimitOrderTrancheResponse, 
+  QueryAllInactiveLimitOrderTrancheRequest, 
+  QueryAllInactiveLimitOrderTrancheResponse, 
+  QueryAllPoolReservesRequest, 
+  QueryAllPoolReservesResponse, 
+  QueryGetPoolReservesRequest, 
+  QueryGetPoolReservesResponse, 
+  QueryEstimateMultiHopSwapRequest, 
+  QueryEstimateMultiHopSwapResponse, 
+  QueryEstimatePlaceLimitOrderRequest, 
+  QueryEstimatePlaceLimitOrderResponse, 
+  QueryPoolRequest, 
+  QueryPoolResponse, 
+  QueryPoolByIDRequest, 
+  QueryGetPoolMetadataRequest, 
+  QueryGetPoolMetadataResponse, 
+  QueryAllPoolMetadataRequest, 
+  QueryAllPoolMetadataResponse 
+} from "@neutron-org/neutronjs/neutron/dex/query";
 
 // Constants
 const DEFAULT_GAS_PRICE = '0.025untrn';
 const DEFAULT_GAS_LIMIT = '400000';
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+
+interface OrderBookLevel {
+  price: number;
+  quantity: number;
+}
+
+interface OrderBook {
+  asks: OrderBookLevel[];
+  bids: OrderBookLevel[];
+}
 
 // Custom error types
-class LimitOrderError extends Error {
+class DualityError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'LimitOrderError';
+    this.name = 'DualityError';
   }
 }
 
-class ConnectionError extends LimitOrderError {
+class ConnectionError extends DualityError {
   constructor(message = 'Client not connected') {
     super(message);
     this.name = 'ConnectionError';
   }
 }
 
-// Enums
-enum OrderType {
-  GOOD_TIL_CANCELLED = 0,
-  FILL_OR_KILL = 1,
-  IMMEDIATE_OR_CANCEL = 2,
-  JUST_IN_TIME = 3,
-}
-
 interface ClientConfig {
   gasPrice?: string;
-  maxRetries?: number;
-  retryDelayMs?: number;
 }
 
 export class DualityClient {
   private static instance: DualityClient | null = null;
   private signingClient: SigningStargateClient | null = null;
   private readonly msgClient: Msg;
+  private readonly queryExtension: ReturnType<typeof createRpcQueryExtension>;
   private readonly registry: Registry;
   private readonly config: Required<ClientConfig>;
   private isConnected = false;
@@ -63,15 +100,15 @@ export class DualityClient {
   private constructor(
     private readonly rpcEndpoint: string,
     msgClient: Msg,
+    queryExtension: ReturnType<typeof createRpcQueryExtension>,
     config: ClientConfig = {},
   ) {
     this.msgClient = msgClient;
+    this.queryExtension = queryExtension;
     this.registry = new Registry();
     this.registry.register('/neutron.dex.MsgPlaceLimitOrder', MsgPlaceLimitOrder as GeneratedType);
     this.config = {
-      gasPrice: config.gasPrice ?? DEFAULT_GAS_PRICE,
-      maxRetries: config.maxRetries ?? MAX_RETRIES,
-      retryDelayMs: config.retryDelayMs ?? RETRY_DELAY_MS,
+      gasPrice: config.gasPrice ?? DEFAULT_GAS_PRICE
     };
   }
 
@@ -81,16 +118,13 @@ export class DualityClient {
   ): Promise<DualityClient> {
     if (!DualityClient.instance) {
       const tendermintClient = await Tendermint34Client.connect(rpcEndpoint);
-      const queryClient = new QueryClient(tendermintClient);
-      const rpc = createProtobufRpcClient(queryClient);
+      const queryClient: QueryClient = new QueryClient(tendermintClient);
+      const rpc: ProtobufRpcClient = createProtobufRpcClient(queryClient);
       const msgClient = new MsgClientImpl(rpc);
-      DualityClient.instance = new DualityClient(rpcEndpoint, msgClient, config);
+      const queryExtension = createRpcQueryExtension(queryClient);
+      DualityClient.instance = new DualityClient(rpcEndpoint, msgClient, queryExtension, config);
     }
     return DualityClient.instance;
-  }
-
-  private async delay(ms: number): Promise<unknown> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async connect(signer: OfflineSigner, options?: { gasPrice?: string }): Promise<void> {
@@ -108,39 +142,83 @@ export class DualityClient {
     }
   }
 
-  private async executeWithRetry<T>(operation: () => Promise<T>, retryCount = 0): Promise<T> {
-    try {
-      return await operation();
-    } catch (error) {
-      if (retryCount >= this.config.maxRetries) {
-        throw error;
-      }
-      await this.delay(this.config.retryDelayMs * Math.pow(2, retryCount));
-      return this.executeWithRetry(operation, retryCount + 1);
+  async getParams(request?: QueryParamsRequest): Promise<QueryParamsResponse> {
+    return await this.queryExtension.params(request || {});
+  }
+
+  async getLimitOrderTrancheUser(
+    request: QueryGetLimitOrderTrancheUserRequest,
+  ): Promise<QueryGetLimitOrderTrancheUserResponse> {
+    return await this.queryExtension.limitOrderTrancheUser(request);
+  }
+
+  async getAllLimitOrderTrancheUsers(
+    request?: QueryAllLimitOrderTrancheUserRequest
+  ): Promise<QueryAllLimitOrderTrancheUserResponse> {
+    return await this.queryExtension.limitOrderTrancheUserAll(request || {});
+  }
+
+  async getLimitOrderTranche(
+    request: QueryGetLimitOrderTrancheRequest,
+  ): Promise<QueryGetLimitOrderTrancheResponse> {
+    return await this.queryExtension.limitOrderTranche(request);
+  }
+
+  async getLimitOrderTranchesByAddress(
+    request: QueryAllLimitOrderTrancheUserByAddressRequest,
+  ): Promise<QueryAllLimitOrderTrancheUserByAddressResponse> {
+    return await this.queryExtension.limitOrderTrancheUserAllByAddress(request);
+  }
+
+  async getAllLimitOrderTranches(
+    request: QueryAllLimitOrderTrancheRequest
+  ): Promise<QueryAllLimitOrderTrancheResponse> {
+    return await this.queryExtension.limitOrderTrancheAll(request);
+  }
+
+  async getTickLiquidity(
+    request: QueryAllTickLiquidityRequest
+  ): Promise<QueryAllTickLiquidityResponse> {
+    return await this.queryExtension.tickLiquidityAll(request);
+  }
+
+  async getPoolReserves(
+    request: QueryGetPoolReservesRequest
+  ): Promise<QueryGetPoolReservesResponse> {
+    return await this.queryExtension.poolReserves(request);
+  }
+
+  async getAllPoolReserves(
+    request: QueryAllPoolReservesRequest
+  ): Promise<QueryAllPoolReservesResponse> {
+    return await this.queryExtension.poolReservesAll(request);
+  }
+
+  private checkConnection(): void {
+    if (!this.isConnected || !this.signingClient) {
+      throw new ConnectionError();
     }
   }
 
   async placeLimitOrder(
     address: string,
-    token: string,
+    token: TokenMetadata,
     side: 'BUY' | 'SELL',
     amountIn: string,
     limitPrice: string | number,
-    orderType: OrderType = OrderType.IMMEDIATE_OR_CANCEL,
+    orderType: LimitOrderType = LimitOrderType.IMMEDIATE_OR_CANCEL,
     maxRetries: number = 3,
     priceAdjustmentFactor: number = 1.01,
   ) {
-    if (!this.isConnected || !this.signingClient) {
-      throw new ConnectionError();
-    }
+    this.checkConnection();
 
     let currentPrice = Number(limitPrice);
     let retryCount = 0;
 
     while (retryCount < maxRetries) {
       const isBuySide = side === 'BUY';
-      const tokenIn = isBuySide ? TOKENS_MAP.get(TokenSymbol.USDC)!.denom : token;
-      const tokenOut = isBuySide ? token : TOKENS_MAP.get(TokenSymbol.USDC)!.denom;
+      const tokenIn = isBuySide ? getTokenBySymbol(TokenSymbol.USDC).denom : token.denom;
+      const tokenOut = isBuySide ? token.denom : getTokenBySymbol(TokenSymbol.USDC).denom;
       const calculatedAmountIn = isBuySide
         ? amountIn
         : (Number(amountIn) * Number(limitPrice)).toFixed();
@@ -175,7 +253,7 @@ export class DualityClient {
         if (errorMessage.includes('Trade cannot be filled at the specified LimitPrice')) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            throw new LimitOrderError(
+            throw new DualityError(
               `Failed to place order after ${maxRetries} attempts: ${errorMessage}`,
             );
           }
@@ -193,11 +271,101 @@ export class DualityClient {
           continue;
         }
 
-        throw new LimitOrderError(`Transaction failed: ${errorMessage}`);
+        throw new DualityError(`Transaction failed: ${errorMessage}`);
       }
     }
 
-    throw new LimitOrderError('Maximum retry attempts reached');
+    throw new DualityError('Maximum retry attempts reached');
+  }
+
+  async getOrderBook(tokenIn: TokenMetadata, tokenOut: TokenMetadata, limit: number = 5): Promise<OrderBook> {
+    try {
+      const pairId = `${tokenIn.denom}<>${tokenOut.denom}`;
+
+      // Fetch asks and bids data in parallel
+      const [asksData, bidsData] = await Promise.all([
+        this.getTickLiquidity({
+          pairId,
+          tokenIn: tokenIn.denom
+        }),
+        this.getTickLiquidity({
+          pairId,
+          tokenIn: tokenOut.denom
+        })
+      ]);
+
+      // Helper function to process tick data
+      const processTickData = (
+          tick: any,
+          isAsk: boolean,
+          token: TokenMetadata
+      ): { price: number; quantity: number } | null => {
+        const processReserves = (
+            key: any,
+            reserves: string,
+            isBid: boolean
+        ) => {
+          const tickIndex = Number(key.tickIndexTakerToMaker?.toString() || '0');
+          const basePrice = calculateTickPrice(tickIndex);
+          const price = isBid ? 1 / basePrice : basePrice;
+          const quantity = calculateTokenAmount(reserves, token);
+
+          if (quantity === 0) return null;
+
+          return {
+            price,
+            quantity: isBid ? quantity / price : quantity
+          };
+        };
+
+        if (tick.poolReserves?.key) {
+          return processReserves(
+              tick.poolReserves.key,
+              tick.poolReserves.reservesMakerDenom || '0',
+              !isAsk
+          );
+        }
+
+        if (tick.limitOrderTranche?.key) {
+          return processReserves(
+              tick.limitOrderTranche.key,
+              tick.limitOrderTranche.totalMakerDenom || '0',
+              !isAsk
+          );
+        }
+
+        return null;
+      };
+
+      // Process orderbook data
+      const orderBook: OrderBook = {
+        asks: [],
+        bids: []
+      };
+
+      // Process asks - sort by price ascending (lowest first) and take top N
+      if (asksData.tickLiquidity) {
+        orderBook.asks = asksData.tickLiquidity
+            .map(tick => processTickData(tick, true, tokenIn))
+            .filter((item): item is { price: number; quantity: number } => item !== null)
+            .sort((a, b) => a.price - b.price)
+            .slice(0, limit);
+      }
+
+      // Process bids - sort by price descending (highest first) and take top N
+      if (bidsData.tickLiquidity) {
+        orderBook.bids = bidsData.tickLiquidity
+            .map(tick => processTickData(tick, false, tokenOut))
+            .filter((item): item is { price: number; quantity: number } => item !== null)
+            .sort((a, b) => b.price - a.price)
+            .slice(0, limit);
+      }
+
+      return orderBook;
+    } catch (error) {
+      console.error("Error fetching orderbook:", error);
+      throw error;
+    }
   }
 
   public disconnect(): void {

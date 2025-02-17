@@ -1,18 +1,13 @@
 import WebSocket from 'ws';
 import AstroClient from '../../astroport/astroClient';
-import {TOKENS_MAP, TokenSymbol} from "../../../util/token";
+import { TokenSymbol, getTokenBySymbol } from '../../../util/token';
 
 export const BINANCE = {
-  // name
   name: 'BINANCE',
-  // type
   exchangeType: 'CEX',
-  // suffix
   futureSuffix: 'USDT',
-  // Websocket array for stream
   wss: [],
   wssDepth: [],
-  // URL (WebSocket Stream)
   wssFutureUrl: 'wss://fstream.binance.com/ws',
 };
 
@@ -78,10 +73,9 @@ export function getCurrentPriceDepthFutureBinanceWebsocket(
       console.log(`${BINANCE.name} [${_symbol}]'s Future Websocket Connected at ${timestamp}`);
 
       setInterval(async () => {
-        [ntrnUsdcPrice, usdcNtrnPrice] = await _client.getPrice(
-            TOKENS_MAP.get(TokenSymbol.NTRN)!.symbol,
-            TOKENS_MAP.get(TokenSymbol.USDC)!.symbol,
-            1000);
+        const tokenNtrn = getTokenBySymbol(TokenSymbol.NTRN);
+        const tokenUsdc = getTokenBySymbol(TokenSymbol.USDC);
+        [ntrnUsdcPrice, usdcNtrnPrice] = await _client.getPrice(tokenNtrn.symbol, tokenUsdc.symbol, 1000);
       }, 1000);
     };
 
