@@ -1,9 +1,12 @@
 module.exports = {
   apps: [
     {
-      name: "proton",
+      name: "newArbitrage",
       script: "npm",
-      args: "start",
+      args: "run start:new",
+      env: {
+        NODE_ENV: "production",
+      },
     },
   ],
 };
