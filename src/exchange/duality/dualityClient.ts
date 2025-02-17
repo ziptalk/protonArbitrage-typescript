@@ -1,58 +1,42 @@
 import {LimitOrderType, MsgPlaceLimitOrder} from '@neutron-org/neutronjs/neutron/dex/tx';
 import {
   createProtobufRpcClient,
-  GasPrice, ProtobufRpcClient, QueryClient,
+  GasPrice,
+  ProtobufRpcClient,
+  QueryClient,
   SigningStargateClient,
 } from '@cosmjs/stargate';
-import { GeneratedType, OfflineSigner, Registry, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
-import { Msg, MsgClientImpl } from '@neutron-org/neutronjs/neutron/dex/tx.rpc.msg';
-import { Tendermint34Client } from '@cosmjs/tendermint-rpc';
-import BigNumber from 'bignumber.js';
+import {DirectSecp256k1HdWallet, GeneratedType, Registry} from '@cosmjs/proto-signing';
+import {Msg, MsgClientImpl} from '@neutron-org/neutronjs/neutron/dex/tx.rpc.msg';
+import {Tendermint34Client} from '@cosmjs/tendermint-rpc';
 import {
-  TokenSymbol,
+  calculateDecimal,
+  calculateTickPrice,
+  calculateTokenAmount,
   getTokenBySymbol,
   TokenMetadata,
-  calculateTokenAmount,
-  calculateDecimal,
-  calculateTickPrice
+  TokenSymbol
 } from '../../util/token';
 import {createRpcQueryExtension} from "@neutron-org/neutronjs/neutron/dex/query.rpc.Query";
-import { 
-  QueryParamsRequest, 
-  QueryParamsResponse, 
-  QueryGetLimitOrderTrancheUserRequest, 
-  QueryGetLimitOrderTrancheUserResponse, 
-  QueryAllLimitOrderTrancheUserRequest, 
-  QueryAllLimitOrderTrancheUserResponse, 
-  QueryAllLimitOrderTrancheUserByAddressRequest, 
-  QueryAllLimitOrderTrancheUserByAddressResponse, 
-  QueryGetLimitOrderTrancheRequest, 
-  QueryGetLimitOrderTrancheResponse, 
-  QueryAllLimitOrderTrancheRequest, 
-  QueryAllLimitOrderTrancheResponse, 
-  QueryAllUserDepositsRequest, 
-  QueryAllUserDepositsResponse, 
-  QueryAllTickLiquidityRequest, 
-  QueryAllTickLiquidityResponse, 
-  QueryGetInactiveLimitOrderTrancheRequest, 
-  QueryGetInactiveLimitOrderTrancheResponse, 
-  QueryAllInactiveLimitOrderTrancheRequest, 
-  QueryAllInactiveLimitOrderTrancheResponse, 
-  QueryAllPoolReservesRequest, 
-  QueryAllPoolReservesResponse, 
-  QueryGetPoolReservesRequest, 
-  QueryGetPoolReservesResponse, 
-  QueryEstimateMultiHopSwapRequest, 
-  QueryEstimateMultiHopSwapResponse, 
-  QueryEstimatePlaceLimitOrderRequest, 
-  QueryEstimatePlaceLimitOrderResponse, 
-  QueryPoolRequest, 
-  QueryPoolResponse, 
-  QueryPoolByIDRequest, 
-  QueryGetPoolMetadataRequest, 
-  QueryGetPoolMetadataResponse, 
-  QueryAllPoolMetadataRequest, 
-  QueryAllPoolMetadataResponse 
+import {
+  QueryAllLimitOrderTrancheRequest,
+  QueryAllLimitOrderTrancheResponse,
+  QueryAllLimitOrderTrancheUserByAddressRequest,
+  QueryAllLimitOrderTrancheUserByAddressResponse,
+  QueryAllLimitOrderTrancheUserRequest,
+  QueryAllLimitOrderTrancheUserResponse,
+  QueryAllPoolReservesRequest,
+  QueryAllPoolReservesResponse,
+  QueryAllTickLiquidityRequest,
+  QueryAllTickLiquidityResponse,
+  QueryGetLimitOrderTrancheRequest,
+  QueryGetLimitOrderTrancheResponse,
+  QueryGetLimitOrderTrancheUserRequest,
+  QueryGetLimitOrderTrancheUserResponse,
+  QueryGetPoolReservesRequest,
+  QueryGetPoolReservesResponse,
+  QueryParamsRequest,
+  QueryParamsResponse
 } from "@neutron-org/neutronjs/neutron/dex/query";
 
 // Constants
@@ -129,8 +113,7 @@ export class DualityClient {
       const msgClient = new MsgClientImpl(rpc);
       const queryExtension = createRpcQueryExtension(queryClient);
       DualityClient.instance = new DualityClient(rpcEndpoint, msgClient, queryExtension, config);
-      const address = (await wallet.getAccounts())[0].address;
-      DualityClient.instance.address = address;
+      DualityClient.instance.address = (await wallet.getAccounts())[0].address;
       try {
         DualityClient.instance.signingClient = await SigningStargateClient.connectWithSigner(
           rpcEndpoint,
@@ -211,6 +194,12 @@ export class DualityClient {
   getAddress(): string {
     return this.address;
   }
+
+  async fetchUSDTBalance(): Promise<number> {
+      this.checkConnection();
+      const balance = await (this.signingClient!).getBalance(this.address, getTokenBySymbol(TokenSymbol.USDC).denom);
+      return Number(balance.amount);
+  }
   async placeLimitOrder(
     address: string,
     token: TokenMetadata,
@@ -289,8 +278,9 @@ export class DualityClient {
     throw new DualityError('Maximum retry attempts reached');
   }
 
-  async getOrderBook(tokenIn: TokenMetadata, tokenOut: TokenMetadata, limit: number = 5): Promise<OrderBook> {
+  async getOrderBook(tokenIn: TokenMetadata, limit: number = 5): Promise<[number, number]> {
     try {
+      const tokenOut = getTokenBySymbol(TokenSymbol.USDC);
       const pairId = `${tokenIn.denom}<>${tokenOut.denom}`;
 
       // Fetch asks and bids data in parallel
@@ -372,7 +362,7 @@ export class DualityClient {
             .slice(0, limit);
       }
 
-      return orderBook;
+      return [orderBook.bids[0]?.price || 0, orderBook.asks[0]?.price || 0];
     } catch (error) {
       console.error("Error fetching orderbook:", error);
       throw error;
