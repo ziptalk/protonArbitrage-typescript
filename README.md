@@ -34,11 +34,7 @@ cp .env.example .env
 
 ## Configuration
 
-Configure the following environment variables in your `.env` file:
-
-- Binance API credentials
-- Cosmos wallet mnemonic
-- RPC URLs
+Configure environment variables in your `.env` file:
 
 ## Usage
 
@@ -62,12 +58,20 @@ pm2 start ecosystem.config.js
 
 - `/src`
   - `/arbitrage` - Arbitrage strategies implementation
+    - `binanceDuality.ts` - Binance-Duality arbitrage logic
+    - `init.ts` - Initialization and setup
+    - `newArbitrage.ts` - New arbitrage implementations
   - `/exchange` - Exchange-specific implementations
-    - `/binance` - Binance exchange integration
+    - `/binance` 
+      - `/rest` - REST API client
+      - `/websocket` - WebSocket implementations for public and private data
     - `/duality` - Duality protocol integration
     - `/astroport` - Astroport protocol integration
   - `/types` - TypeScript type definitions
-  - `/util` - Utility functions and helpers
+  - `/util` 
+    - `exchange.ts` - Exchange utility functions
+    - `logger.ts` - Logging utilities
+    - `token.ts` - Token configurations and helpers
 
 ## Scripts
 
