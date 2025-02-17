@@ -1,15 +1,7 @@
 import WebSocket from 'ws';
 import AstroClient from '../../astroport/astroClient';
 import { TokenSymbol, getTokenBySymbol } from '../../../util/token';
-
-export const BINANCE = {
-  name: 'BINANCE',
-  exchangeType: 'CEX',
-  futureSuffix: 'USDT',
-  wss: [],
-  wssDepth: [],
-  wssFutureUrl: 'wss://fstream.binance.com/ws',
-};
+import {BINANCE} from "../../../util/exchange";
 
 export function getCurrentPriceDepthFutureBinanceWebsocket(
   _symbol: string,
