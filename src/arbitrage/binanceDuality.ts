@@ -1,22 +1,20 @@
-import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { DualityClient } from '../exchange/duality/dualityClient';
-import dotenv from 'dotenv';
-import { getOrderBook } from '../exchange/binance/rest/restClient';
-import {getTokenBySymbol, TokenSymbol} from '../util/token';
 import {USDMClient} from "binance";
+import {getOrderBook, placeOrder} from '../exchange/binance/rest/restClient';
+import {getTokenBySymbol, TokenSymbol} from '../util/token';
+
+import dotenv from 'dotenv';
 dotenv.config();
 
 export async function runBinanceDualityArbitrage(quantity: number) {
   try {
-    const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC as string, {
-      prefix: 'neutron',
-    });
-
-    const [account] = await wallet.getAccounts();
-    const dualityClient = await DualityClient.getInstance(process.env.RPC_URL as string, {
-      gasPrice: '0.025untrn',
-    });
-    await dualityClient.connect(wallet);
+    const dualityClient = await DualityClient.getInstance(
+      process.env.RPC_URL as string,
+      process.env.MNEMONIC as string,
+      {
+        gasPrice: '0.025untrn',
+      }
+    );
 
     const binanceClient = new USDMClient({
       api_key: process.env.BINANCE_API_KEY as string,
@@ -29,12 +27,11 @@ export async function runBinanceDualityArbitrage(quantity: number) {
     const tokenIn = getTokenBySymbol(TokenSymbol.NTRN);
     const tokenOut = getTokenBySymbol(TokenSymbol.USDC);
 
-
     console.log(`\nChecking ${TokenSymbol.NTRN} arbitrage opportunity...`);
     const dualityOrderBook = await dualityClient.getOrderBook(tokenIn, tokenOut);
     console.log('Duality Orderbook:', dualityOrderBook);
 
-    const binanceOrderBook = await getOrderBook(binanceClient, TokenSymbol.NTRN);
+    const binanceOrderBook = await getOrderBook(binanceClient, tokenIn.symbol);
 
     if (!binanceOrderBook || !dualityOrderBook) {
       console.error('Failed to fetch order books');
@@ -57,32 +54,32 @@ export async function runBinanceDualityArbitrage(quantity: number) {
     // Compare prices and execute arbitrage if profitable
     if (binanceBidPrice > dualityAskPrice) {
       console.log(`Found arbitrage opportunity for 1 ${TokenSymbol.NTRN}!`);
-      // // Buy on Duality, Sell on Binance
-      // const dualityBuyResult = await dualityClient.placeLimitOrder(
-      //   account.address,
-      //   token.denom,
-      //   'BUY',
-      //   quantity.toString(),
-      //   dualityOrderBook.asks[0].price.toString(),
-      // );
-      // console.log('Duality Buy Result:', dualityBuyResult);
-      //
-      // const binanceSellResult = await placeOrder(binanceClient, token.symbol, quantity, 'SELL');
-      // console.log('Binance Sell Result:', binanceSellResult);
+      // Buy on Duality, Sell on Binance
+      const dualityBuyResult = await dualityClient.placeLimitOrder(
+        dualityClient.getAddress(),
+        tokenIn,
+        'BUY',
+        quantity.toString(),
+        dualityOrderBook.asks[0].price.toString(),
+      );
+      console.log('Duality Buy Result:', dualityBuyResult);
+
+      const binanceSellResult = await placeOrder(binanceClient, tokenIn.symbol, quantity, 'SELL');
+      console.log('Binance Sell Result:', binanceSellResult);
     } else if (binanceAskPrice < dualityBidPrice) {
       console.log(`Found arbitrage opportunity for 2 ${TokenSymbol.NTRN}!`);
-      // // Buy on Binance, Sell on Duality
-      // const binanceBuyResult = await placeOrder(binanceClient, token.symbol, quantity, 'BUY');
-      // console.log('Binance Buy Result:', binanceBuyResult);
-      //
-      // const dualitySellResult = await dualityClient.placeLimitOrder(
-      //   account.address,
-      //   token.denom,
-      //   'SELL',
-      //   quantity.toString(),
-      //   dualityOrderBook.bids[0].price.toString(),
-      // );
-      // console.log('Duality Sell Result:', dualitySellResult);
+      // Buy on Binance, Sell on Duality
+      const binanceBuyResult = await placeOrder(binanceClient, tokenIn.symbol, quantity, 'BUY');
+      console.log('Binance Buy Result:', binanceBuyResult);
+
+      const dualitySellResult = await dualityClient.placeLimitOrder(
+        dualityClient.getAddress(),
+        tokenIn,
+        'SELL',
+        quantity.toString(),
+        dualityOrderBook.bids[0].price.toString(),
+      );
+      console.log('Duality Sell Result:', dualitySellResult);
     } else {
       console.log(`No arbitrage opportunity found for ${TokenSymbol.NTRN}`);
     }

@@ -8,15 +8,13 @@ dotenv.config();
 
 export async function runAstroportDualityArbitrage(quantity: number) {
   try {
-    const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC as string, {
-      prefix: 'neutron',
-    });
-
-    const [account] = await wallet.getAccounts();
-    const dualityClient = await DualityClient.getInstance(process.env.RPC_URL as string, {
-      gasPrice: '0.025untrn',
-    });
-    await dualityClient.connect(wallet);
+    const dualityClient = await DualityClient.getInstance(
+      process.env.RPC_URL as string,
+        process.env.MNEMONIC as string,
+      {
+        gasPrice: '0.025untrn',
+      }
+    );
 
     const astroClient = new AstroClient(process.env.ACCOUNT_ADDRESS as string);
     await astroClient.init(process.env.MNEMONIC as string, process.env.RPC_URL as string);
@@ -44,7 +42,7 @@ export async function runAstroportDualityArbitrage(quantity: number) {
         console.log('Astroport Buy Result:', astroSwapResult);
 
         const dualitySellResult = await dualityClient.placeLimitOrder(
-          account.address,
+            dualityClient.getAddress(),
             token,
           'SELL',
           dualityAmount,
@@ -54,7 +52,7 @@ export async function runAstroportDualityArbitrage(quantity: number) {
       } else if (astroPrice[1] < dualityOrderBook.asks[0].price) {
         // Buy on Duality, Sell on Astroport
         const dualityBuyResult = await dualityClient.placeLimitOrder(
-          account.address,
+            dualityClient.getAddress(),
           token,
           'BUY',
           dualityAmount,

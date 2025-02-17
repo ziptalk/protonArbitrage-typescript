@@ -4,7 +4,7 @@ import {
   GasPrice, ProtobufRpcClient, QueryClient,
   SigningStargateClient,
 } from '@cosmjs/stargate';
-import { GeneratedType, OfflineSigner, Registry } from '@cosmjs/proto-signing';
+import { GeneratedType, OfflineSigner, Registry, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { Msg, MsgClientImpl } from '@neutron-org/neutronjs/neutron/dex/tx.rpc.msg';
 import { Tendermint34Client } from '@cosmjs/tendermint-rpc';
 import BigNumber from 'bignumber.js';
@@ -96,6 +96,7 @@ export class DualityClient {
   private readonly registry: Registry;
   private readonly config: Required<ClientConfig>;
   private isConnected = false;
+  private address!: string;
 
   private constructor(
     private readonly rpcEndpoint: string,
@@ -114,32 +115,40 @@ export class DualityClient {
 
   public static async getInstance(
     rpcEndpoint: string,
+    mnemonic: string,
     config?: ClientConfig,
+    options?: { gasPrice?: string },
   ): Promise<DualityClient> {
     if (!DualityClient.instance) {
+      const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+        prefix: 'neutron',
+      });
       const tendermintClient = await Tendermint34Client.connect(rpcEndpoint);
       const queryClient: QueryClient = new QueryClient(tendermintClient);
       const rpc: ProtobufRpcClient = createProtobufRpcClient(queryClient);
       const msgClient = new MsgClientImpl(rpc);
       const queryExtension = createRpcQueryExtension(queryClient);
       DualityClient.instance = new DualityClient(rpcEndpoint, msgClient, queryExtension, config);
+      const address = (await wallet.getAccounts())[0].address;
+      DualityClient.instance.address = address;
+      try {
+        DualityClient.instance.signingClient = await SigningStargateClient.connectWithSigner(
+          rpcEndpoint,
+          wallet,
+          {
+            gasPrice: GasPrice.fromString(options?.gasPrice || DualityClient.instance.config.gasPrice),
+            registry: DualityClient.instance.registry,
+          },
+        );
+        DualityClient.instance.isConnected = true;
+      } catch (error) {
+        DualityClient.instance.isConnected = false;
+        throw new ConnectionError(
+          `Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     return DualityClient.instance;
-  }
-
-  async connect(signer: OfflineSigner, options?: { gasPrice?: string }): Promise<void> {
-    try {
-      this.signingClient = await SigningStargateClient.connectWithSigner(this.rpcEndpoint, signer, {
-        gasPrice: GasPrice.fromString(options?.gasPrice || this.config.gasPrice),
-        registry: this.registry,
-      });
-      this.isConnected = true;
-    } catch (error) {
-      this.isConnected = false;
-      throw new ConnectionError(
-        `Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   async getParams(request?: QueryParamsRequest): Promise<QueryParamsResponse> {
@@ -199,7 +208,9 @@ export class DualityClient {
       throw new ConnectionError();
     }
   }
-
+  getAddress(): string {
+    return this.address;
+  }
   async placeLimitOrder(
     address: string,
     token: TokenMetadata,
