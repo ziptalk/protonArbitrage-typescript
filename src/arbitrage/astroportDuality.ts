@@ -33,34 +33,42 @@ export async function runAstroportDualityArbitrage(quantity: number) {
     for (const token of tokens) {
       // Get prices from both exchanges
       const astroPrice = await astroClient.getPrice(token.symbol, TokenSymbol.USDC, swapAmount);
-      const dualityOrderBook = await dualityClient.getOrderBook(token, getTokenBySymbol(TokenSymbol.USDC));
+      const dualityOrderBook = await dualityClient.getOrderBook(token);
 
       // Compare prices and execute arbitrage if profitable
-      if (astroPrice[0] > dualityOrderBook.bids[0].price) {
+      if (astroPrice[0] > dualityOrderBook[1]) {
         // Buy on Astroport, Sell on Duality
-        const astroSwapResult = await astroClient.swapTokens(getTokenBySymbol(TokenSymbol.USDC)!.symbol, token.symbol, swapAmount);
+        const astroSwapResult = await astroClient.swapTokens(
+          getTokenBySymbol(TokenSymbol.USDC)!.symbol,
+          token.symbol,
+          swapAmount
+        );
         console.log('Astroport Buy Result:', astroSwapResult);
 
         const dualitySellResult = await dualityClient.placeLimitOrder(
-            dualityClient.getAddress(),
-            token,
+          dualityClient.getAddress(),
+          token,
           'SELL',
           dualityAmount,
-          dualityOrderBook.bids[0].price,
+          dualityOrderBook[1].toString()
         );
         console.log('Duality Sell Result:', dualitySellResult);
-      } else if (astroPrice[1] < dualityOrderBook.asks[0].price) {
+      } else if (astroPrice[1] < dualityOrderBook[0]) {
         // Buy on Duality, Sell on Astroport
         const dualityBuyResult = await dualityClient.placeLimitOrder(
-            dualityClient.getAddress(),
+          dualityClient.getAddress(),
           token,
           'BUY',
           dualityAmount,
-          dualityOrderBook.asks[0].price,
+          dualityOrderBook[0].toString()
         );
         console.log('Duality Buy Result:', dualityBuyResult);
 
-        const astroSwapResult = await astroClient.swapTokens(getTokenBySymbol(TokenSymbol.USDC)!.symbol, token.symbol, swapAmount);
+        const astroSwapResult = await astroClient.swapTokens(
+          token.symbol,
+          getTokenBySymbol(TokenSymbol.USDC)!.symbol,
+          swapAmount
+        );
         console.log('Astroport Sell Result:', astroSwapResult);
       }
     }
