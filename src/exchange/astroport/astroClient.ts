@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { Decimal } from '@cosmjs/math';
 import { GasPrice, SearchTxQuery } from '@cosmjs/stargate';
-import { TokenSymbol, getTokenBySymbol, getPairByTokens } from '../../util/token';
+import { TokenSymbol, getTokenBySymbol, getPairByTokens, TokenMetadata, TokenPair } from '../../util/token';
 
 dotenv.config();
 
@@ -15,7 +15,7 @@ class AstroClient {
     this.address = address;
   }
 
-  getToken(symbol: TokenSymbol): Token | undefined {
+  getToken(symbol: TokenSymbol): TokenMetadata | undefined {
     const token = getTokenBySymbol(symbol);
     if (!token) {
       console.warn(`토큰을 찾을 수 없습니다: ${symbol}`);
@@ -58,10 +58,13 @@ class AstroClient {
     amount: number,
   ): Promise<[number, number]> {
     const pair = getPairByTokens(offerAsset, askAsset);
-    const contractAddress = pair.contractAddress;
-    console.log(contractAddress);
-    if (!contractAddress)
-      throw new Error(`토큰 컨트랙트를 찾을 수 없습니다: ${offerAsset} ${askAsset}`);
+    if (!pair) {
+      throw new Error(`Invalid token pair: ${offerAsset} ${askAsset}`);
+    }
+    const contractAddress = pair.pairId;
+    if (!contractAddress) {
+      throw new Error(`Contract address not found for pair: ${offerAsset} ${askAsset}`);
+    }
 
     try {
       const simulationMsg = {
@@ -104,9 +107,13 @@ class AstroClient {
     amount: number,
   ): Promise<string> {
     const pair = getPairByTokens(offerToken, askAsset);
-    const contractAddress = pair.contractAddress;
-    if (!contractAddress)
-      throw new Error(`토큰 컨트랙트를 찾을 수 없습니다: ${offerToken} ${askAsset}`);
+    if (!pair) {
+      throw new Error(`Invalid token pair: ${offerToken} ${askAsset}`);
+    }
+    const contractAddress = pair.pairId;
+    if (!contractAddress) {
+      throw new Error(`Contract address not found for pair: ${offerToken} ${askAsset}`);
+    }
     const address = this.address;
 
     try {

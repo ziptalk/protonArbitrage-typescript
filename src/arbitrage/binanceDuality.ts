@@ -12,6 +12,10 @@ export async function runBinanceDualityArbitrage(quantity: number) {
     const [dualityAskPrice, dualityBidPrice] = await dualityClient.getOrderBook(tokenIn);
 
     const binanceOrderBook = await getOrderBook(binanceClient, tokenIn.symbol);
+    
+    if (!binanceOrderBook) {
+      throw new Error('Failed to fetch Binance order book');
+    }
 
     const binanceBidPrice = Number(binanceOrderBook.bids[0][0]);
     const binanceAskPrice = Number(binanceOrderBook.asks[0][0]);
